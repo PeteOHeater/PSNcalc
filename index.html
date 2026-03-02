@@ -115,7 +115,47 @@
             box-shadow: 0 0 0 3px rgba(200,16,46,0.18);
         }
 
-        /* ─── HOLIDAY CHECKBOXES ─────────────────────────── */
+        /* ─── FLEET TYPE TOGGLE ──────────────────────────── */
+        .fleet-section { margin-bottom: 20px; }
+        .fleet-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+        .fleet-chip { display: flex; align-items: center; cursor: pointer; }
+        .fleet-chip input[type="radio"] { display: none; }
+        .fleet-btn {
+            padding: 9px 18px;
+            border-radius: 10px;
+            border: 1.5px solid #2a2a32;
+            background: #222228;
+            color: #888;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .fleet-chip input:checked + .fleet-btn {
+            border-color: #c8102e;
+            background: rgba(200,16,46,0.1);
+            color: #e8e8ec;
+        }
+        .fleet-btn:hover { border-color: #c8102e; color: #e8e8ec; }
+
+        .adl-badge {
+            display: inline-block;
+            background: rgba(200,16,46,0.15);
+            border: 1px solid rgba(200,16,46,0.35);
+            color: #e8102e;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 5px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+
         .holiday-section {
             margin-top: 20px;
         }
@@ -463,6 +503,22 @@
 
     <!-- INPUTS -->
     <div class="input-section">
+
+        <!-- Fleet Type Toggle -->
+        <div class="fleet-section">
+            <span class="holiday-label">Fleet / Base Type</span>
+            <div class="fleet-chips">
+                <label class="fleet-chip">
+                    <input type="radio" name="fleetType" value="standard" checked onchange="onFleetChange()">
+                    <span class="fleet-btn">Standard &nbsp;(Groups A–O, 15 groups)</span>
+                </label>
+                <label class="fleet-chip">
+                    <input type="radio" name="fleetType" value="adl_captains" onchange="onFleetChange()">
+                    <span class="fleet-btn">🛬 Adelaide Captains &nbsp;(Groups A–F, H–O — no G, 14 groups)</span>
+                </label>
+            </div>
+        </div>
+
         <div class="input-grid">
             <div class="field">
                 <label for="yourGroup">Your Group</label>
@@ -474,7 +530,7 @@
                     <option value="D">Group D</option>
                     <option value="E">Group E</option>
                     <option value="F">Group F</option>
-                    <option value="G">Group G</option>
+                    <option value="G" class="standard-only">Group G</option>
                     <option value="H">Group H</option>
                     <option value="I">Group I</option>
                     <option value="J">Group J</option>
@@ -561,6 +617,10 @@
                 <div class="summary-value" id="nextTopBP">—</div>
                 <div class="summary-label">Next GROUP PSN 1</div>
             </div>
+            <div class="summary-item">
+                <div class="summary-value" style="font-size:22px;padding-top:8px;" id="fleetLabel">—</div>
+                <div class="summary-label">Selected Group &amp; Fleet</div>
+            </div>
         </div>
 
         <div class="calendar-section">
@@ -613,21 +673,25 @@
 </div>
 
 <script>
-    const TOTAL_GROUPS = 15;
-    const GROUPS = 'ABCDEFGHIJKLMNO'.split('');
-
     // ─── CONFIRMED REFERENCES ─────────────────────────────────────────────────
     // Anchor: BP3721 starts 01-Dec-25, Group C is at GROUP PSN 1 (top).
-    // Confirmed rotation: BP3725→D top, BP3731→E top, BP3741(23-Mar-26)→G top.
+    // Confirmed rotation: BP3725→D top, BP3731→E top, BP3741(23-Mar-26)→G top (standard).
+    // Adelaide Captains (no Group G, 14 groups): BP3741→H top ✓
     // BP increments alternate simply: 4, 6, 4, 6, 4, 6 ...
-    //   3721 -4→ 3725 -6→ 3731 -4→ 3735 -6→ 3741 -4→ 3745 -6→ 3751 ...
     const REFERENCE_BP = 3721;
-    const REFERENCE_TOP_GROUP = 'C';   // Group C is PSN1 at BP3721
     const REFERENCE_START = '01-Dec-25';
-
-    // Simple alternating increment: 4, 6, 4, 6 ...
     const BP_INCREMENT_PATTERN = [4, 6];
     const BP_COLORS = ['#1a7a3a', '#1a4a8a'];
+
+    // Group lists
+    const STANDARD_GROUPS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O']; // 15
+    const ADL_GROUPS      = ['A','B','C','D','E','F',    'H','I','J','K','L','M','N','O']; // 14, no G
+
+    // Active config (set by fleet toggle)
+    let GROUPS = STANDARD_GROUPS;
+    let TOTAL_GROUPS = 15;
+    // C is index 2 in both lists — reference top group
+    const REFERENCE_TOP_GROUP = 'C';
 
     // ─── SCHOOL HOLIDAYS ─────────────────────────────────────────────────────
     const SCHOOL_HOLIDAYS = {
@@ -698,7 +762,7 @@
     function getGroupFromPosition(p) { return GROUPS[p - 1]; }
 
     function calculateTopGroup(periodsElapsed) {
-        const startPos = getGroupPosition(REFERENCE_TOP_GROUP);
+        const startPos = getGroupPosition(REFERENCE_TOP_GROUP); // C's position in active list
         const newTopPos = ((startPos - 1 + periodsElapsed) % TOTAL_GROUPS) + 1;
         return getGroupFromPosition(newTopPos);
     }
@@ -709,6 +773,25 @@
         let pos = yourPos - topPos + 1;
         if (pos <= 0) pos += TOTAL_GROUPS;
         return pos;
+    }
+
+    function getFleetType() {
+        return document.querySelector('input[name="fleetType"]:checked').value;
+    }
+
+    function onFleetChange() {
+        const isAdl = getFleetType() === 'adl_captains';
+        GROUPS = isAdl ? ADL_GROUPS : STANDARD_GROUPS;
+        TOTAL_GROUPS = GROUPS.length;
+
+        // Hide Group G option for Adelaide Captains
+        const gOpt = document.querySelector('#yourGroup option[value="G"]');
+        if (gOpt) gOpt.style.display = isAdl ? 'none' : '';
+
+        // If G was selected and user switches to Adelaide, reset
+        if (isAdl && document.getElementById('yourGroup').value === 'G') {
+            document.getElementById('yourGroup').value = '';
+        }
     }
 
     function parseRefDate(dateStr) {
@@ -844,6 +927,11 @@
 
         if (!yourGroup) { alert('Please select your group'); return; }
 
+        // Apply fleet type
+        const isAdl = getFleetType() === 'adl_captains';
+        GROUPS = isAdl ? ADL_GROUPS : STANDARD_GROUPS;
+        TOTAL_GROUPS = GROUPS.length;
+
         const rawPeriods = generateBidPeriods(numPeriods);
         const selectedStates = getSelectedStates();
 
@@ -868,6 +956,12 @@
         document.getElementById('totalPeriods').textContent = rawPeriods.length;
         document.getElementById('topPositions').textContent = topPositionCount;
         document.getElementById('nextTopBP').textContent = nextTopBP || 'None';
+
+        // Show fleet type badge in summary
+        const fleetLabel = isAdl
+            ? 'Group ' + yourGroup + ' &nbsp;<span class="adl-badge">Adelaide Captains</span>'
+            : 'Group ' + yourGroup + ' &nbsp;<span class="adl-badge" style="border-color:rgba(100,200,100,0.35);background:rgba(26,122,58,0.15);color:#4CAF50;">Standard</span>';
+        document.getElementById('fleetLabel').innerHTML = fleetLabel;
 
         // Calendars
         renderCalendars(selectedStates);
